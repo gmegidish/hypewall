@@ -1,0 +1,23 @@
+#!/bin/sh
+
+RED='\033[0;31m'
+NC='\033[0m'
+
+echo "${RED}Uploading to S3${NC}"
+aws --profile blubla s3 sync --acl public-read src s3://hype-hypewall
+
+echo "${RED}Syncing with cloudfront${NC}"
+aws configure set preview.cloudfront true
+aws --profile blubla cloudfront create-invalidation --distribution-id E1F94CH7TPX82F --paths '/*'
+
+echo "${RED}Waiting for cloudfront invalidation to complete${NC}"
+while [ true ]; do
+	sleep 1
+	aws --profile blubla cloudfront list-invalidations --distribution-id E1F94CH7TPX82F | grep "InProgress" >/dev/null
+	if [ $? -ne 0 ]; then
+		# No more "InProgress" 
+		break
+	fi
+done
+
+echo "${RED}All done!${NC}"

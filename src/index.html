@@ -1,0 +1,272 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>HypeWall.tv</title>
+	<meta name="description" content="">
+	<meta name="viewport" content="width=device-width">
+	<style>
+		body {
+			background-color: black;
+			padding: 0;
+			margin: 0;
+			color: white;
+		}
+
+		.logged-out {
+			display: none;
+		}
+
+	</style>
+	<script src="https://embed.twitch.tv/embed/v1.js"></script>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+</head>
+<body>
+
+<div class="hero" style="height: 60px; margin-left: 16px; clear: both;">
+	<div style="float: left;">
+		<img src="/images/hypewall-logo.png" alt style="height: 44px;">
+	</div>
+
+	<div style="float: right; margin: 16px;">
+		<button data-size="2" class="resize-button">2x2</button>
+		<button data-size="3" class="resize-button">3x3</button>
+		<button data-size="4" class="resize-button">4x4</button>
+	</div>
+</div>
+
+<div class="logged-out">
+
+	<div style="display: table; width: 100%; height: 100%;">
+		<div style="display: table-cell; vertical-align: middle; text-align: center;">
+			<div style="height: 500px;">
+				<img src="/images/hypewall-logo.png" alt style="height: 256px;"/>
+				<p></p>
+				<p>
+					HypeWall displays your followed streams in a single place, so you can put it on
+					your 2nd monitor or on a TV at home. Enjoy Twitch to the fullest!
+				</p>
+				<p></p>
+				<p style="margin-top: 32px;">
+					TIP: Hover a stream to unmute audio
+				</p>
+				<a href="" style="margin-top: 32px;">
+					<img src="/images/connect_dark.png" alt="Connect with Twitch"
+					     style="height: 32px;"/>
+				</a>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="container">
+</div>
+
+<script type="text/javascript">
+
+	var CLIENT_ID = "0yn1efmn4mvqpvde7z8xcvfhsu2ft7";
+
+	var frame_size = 3;
+
+	function handlerIn(e) {
+		var embed = $(e.currentTarget).data("embed");
+		var player = embed.getPlayer();
+		if (player) {
+			player.setVolume(1.0);
+		}
+	}
+
+	function handlerOut(e) {
+		var embed = $(e.currentTarget).data("embed");
+		var player = embed.getPlayer();
+		if (player) {
+			player.setVolume(0.0);
+		}
+	}
+
+	function resizeFrame(e, size) {
+		$(e).css("width", "calc((100vw - 20px) / " + size + ")");
+		$(e).css("height", "calc(((100vw - 20px) / " + size + ") * 9 / 16)");
+	}
+
+	function createTwitchEmbed(channel_name) {
+
+		var container = $(".container");
+		var e = $("<div>").css("float", "left").appendTo(container);
+
+		resizeFrame(e, frame_size);
+
+		var embed = new Twitch.Embed(e[0], {
+			width: "100%",
+			height: "100%",
+			channel: channel_name,
+			layout: "video"
+		});
+
+		// start off muted
+		embed.addEventListener(Twitch.Embed.VIDEO_READY, function () {
+			embed.getPlayer().setVolume(0);
+		});
+
+		$(e).data("embed", embed);
+		$(e).hover(handlerIn, handlerOut);
+	}
+
+	function createTwitchEmbeds(channels) {
+		$(channels).each(function (index, e) {
+			createTwitchEmbed(e);
+		});
+	}
+
+	function fixupLoginWithTwitch() {
+		var params = [
+			"response_type=token+id_token",
+			"client_id=" + CLIENT_ID,
+			"redirect_uri=" + document.location.href,
+			"scope=openid"
+		];
+
+		var url = "https://api.twitch.tv/kraken/oauth2/authorize?" + params.join("&");
+		$(".logged-out a").attr("href", url);
+	}
+
+	function fetchLiveStreams(ids) {
+		return new Promise(function (resolve, reject) {
+			var all = "";
+			$(ids).each(function (index, e) {
+				all += "user_id=" + e + "&";
+			});
+
+			var options = {
+				url: "https://api.twitch.tv/helix/streams?" + all,
+				headers: {
+					"Client-ID": CLIENT_ID
+				}
+			};
+
+			$.get(options).done(function (body) {
+
+				var live = [];
+				$(body.data).each(function (index, e) {
+					live.push(e.user_id);
+				});
+
+				console.log("fetchLiveStreams got: " + JSON.stringify(live));
+				resolve(live);
+			});
+		});
+	}
+
+	function fetchUserFollows(user_id) {
+		return new Promise(function (resolve, reject) {
+			var options = {
+				url: "https://api.twitch.tv/helix/users/follows/?first=100&from_id=" + user_id,
+				headers: {
+					"Client-ID": CLIENT_ID
+				}
+			};
+
+			$.get(options).done(function (body) {
+
+				var ids = [];
+				$(body.data).each(function (index, e) {
+					ids.push(e.to_id);
+				});
+
+				console.log("fetchUserFollows got: " + JSON.stringify(ids));
+				resolve(ids);
+			});
+		});
+	}
+
+	function fetchStreamNames(ids) {
+
+		return new Promise(function (resolve, reject) {
+			var url = "https://api.twitch.tv/helix/users?";
+			$(ids).each(function (index, e) {
+				url += "id=" + e + "&";
+			});
+
+			var options2 = {
+				url: url,
+				headers: {
+					"Client-ID": CLIENT_ID,
+					"Accept": "application/vnd.twitchtv.v5+json"
+				}
+			};
+
+			$.get(options2).done(function (body2) {
+
+				var logins = [];
+				$(body2.data).each(function (index, e) {
+					logins.push(e.login);
+				});
+
+				console.log("Found stream names: " + JSON.stringify(logins));
+				resolve(logins);
+			});
+		});
+	}
+
+	function onResizeButtonClicked(e) {
+
+		var size = $(e.currentTarget).data("size");
+		frame_size = size;
+
+		$(".container > div").each(function(index, e) {
+			resizeFrame(e, size);
+		})
+	}
+
+	function onDocumentReady() {
+
+		$(".hero .resize-button").click(onResizeButtonClicked);
+
+		fixupLoginWithTwitch();
+
+		var logged_in = false;
+
+		if (document.location.hash.indexOf("id_token=") >= 0) {
+			// we arrived here after oauth
+			var hash = document.location.hash.substr(1);
+			// document.location.hash = "";
+
+			var args = hash.split("&");
+			for (var i = 0; i < args.length; i++) {
+				if (args[i].indexOf("id_token=") === 0) {
+					var token = args[i].substr("id_token=".length);
+					var tokens = token.split(".");
+					var string = atob(tokens[1]);
+					var json = JSON.parse(string);
+					var sub = json.sub;
+					console.log("Found user_id: " + sub);
+
+					logged_in = true;
+
+					fetchUserFollows(sub).then(function (ids) {
+						fetchLiveStreams(ids).then(function (ids) {
+
+							// since we max at 4x4, there's no reason to load more than 16 streams
+							ids = ids.slice(0, 16);
+
+							fetchStreamNames(ids).then(function (channel_names) {
+								createTwitchEmbeds(channel_names);
+							})
+						});
+					});
+				}
+			}
+		}
+
+		if (!logged_in) {
+			$(".logged-out").show();
+		}
+	}
+
+	$(document).ready(function () {
+		onDocumentReady();
+	});
+
+</script>
+</body>
+</html>
