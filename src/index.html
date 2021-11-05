@@ -136,18 +136,18 @@
 	}
 
 	function fixupLoginWithTwitch() {
-		var params = [
+		const params = [
 			"response_type=token+id_token",
 			"client_id=" + CLIENT_ID,
 			"redirect_uri=" + document.location.href,
-			"scope=openid"
+			"scope=openid+user:read:follows"
 		];
 
-		var url = "https://api.twitch.tv/kraken/oauth2/authorize?" + params.join("&");
+		const url = "https://api.twitch.tv/kraken/oauth2/authorize?" + params.join("&");
 		$(".logged-out a").attr("href", url);
 	}
 
-	function fetchLiveStreams(ids) {
+	function fetchLiveStreams(token, ids) {
 		return new Promise(function (resolve, reject) {
 			var all = "";
 			$(ids).each(function (index, e) {
@@ -157,7 +157,8 @@
 			var options = {
 				url: "https://api.twitch.tv/helix/streams?" + all,
 				headers: {
-					"Client-ID": CLIENT_ID
+					"Client-ID": CLIENT_ID,
+					"Authorization": "Bearer " + token,
 				}
 			};
 
@@ -174,20 +175,23 @@
 		});
 	}
 
-	function fetchUserFollows(user_id) {
+	function fetchUserFollows(token, user_id) {
 		return new Promise(function (resolve, reject) {
 			var options = {
-				url: "https://api.twitch.tv/helix/users/follows/?first=100&from_id=" + user_id,
+				url: "https://api.twitch.tv/helix/streams/followed?first=100&user_id=" + user_id,
 				headers: {
-					"Client-ID": CLIENT_ID
+					"Client-ID": CLIENT_ID,
+					"Authorization": "Bearer " + token,
+					'accept': 'application/vnd.twitchtv.v5+json',
 				}
 			};
 
 			$.get(options).done(function (body) {
 
-				var ids = [];
+				console.dir(body);
+				const ids = [];
 				$(body.data).each(function (index, e) {
-					ids.push(e.to_id);
+					ids.push(e.user_id);
 				});
 
 				console.log("fetchUserFollows got: " + JSON.stringify(ids));
@@ -196,26 +200,29 @@
 		});
 	}
 
-	function fetchStreamNames(ids) {
+	function fetchStreamNames(token, ids) {
 
-		return new Promise(function (resolve, reject) {
-			var url = "https://api.twitch.tv/helix/users?";
-			$(ids).each(function (index, e) {
+		return new Promise((resolve, reject) => {
+			let url = "https://api.twitch.tv/helix/users?";
+			$(ids).each((index, e) => {
 				url += "id=" + e + "&";
 			});
 
-			var options2 = {
-				url: url,
+			console.log("Fetching url " + url);
+
+			const options2 = {
+				url,
 				headers: {
 					"Client-ID": CLIENT_ID,
+					"Authorization": "Bearer " + token,
 					"Accept": "application/vnd.twitchtv.v5+json"
 				}
 			};
 
-			$.get(options2).done(function (body2) {
+			$.get(options2).done((body2) => {
 
-				var logins = [];
-				$(body2.data).each(function (index, e) {
+				const logins = [];
+				$(body2.data).each((index, e) => {
 					logins.push(e.login);
 				});
 
@@ -243,37 +250,39 @@
 
 		var logged_in = false;
 
-		if (document.location.hash.indexOf("id_token=") >= 0) {
+		if (document.location.hash.indexOf("access_token=") >= 0) {
 			// we arrived here after oauth
-			var hash = document.location.hash.substr(1);
-			// document.location.hash = "";
+			const hash = document.location.hash.substr(1);
 
-			var args = hash.split("&");
-			for (var i = 0; i < args.length; i++) {
+			let id_token = null;
+			let access_token = null;
+
+			const args = hash.split("&");
+			for (let i = 0; i < args.length; i++) {
 				if (args[i].indexOf("id_token=") === 0) {
-					var token = args[i].substr("id_token=".length);
-					var tokens = token.split(".");
-					var string = atob(tokens[1]);
-					var json = JSON.parse(string);
-					var sub = json.sub;
-					console.log("Found user_id: " + sub);
-
-					logged_in = true;
-					$(".hero").show();
-
-					fetchUserFollows(sub).then(function (ids) {
-						fetchLiveStreams(ids).then(function (ids) {
-
-							// since we max at 4x4, there's no reason to load more than 16 streams
-							ids = ids.slice(0, 16);
-
-							fetchStreamNames(ids).then(function (channel_names) {
-								createTwitchEmbeds(channel_names);
-							})
-						});
-					});
+					id_token = args[i].substr("id_token=".length);
+				} else if (args[i].indexOf("access_token=") === 0) {
+					access_token = args[i].substr("access_token=".length);
 				}
 			}
+				
+			const tokens = id_token.split(".");
+			const json = JSON.parse(atob(tokens[1]));
+			const sub = json.sub;
+			console.log("Found user_id: " + sub);
+
+			logged_in = true;
+			$(".hero").show();
+
+			fetchUserFollows(access_token, sub).then((ids) => {
+
+				// since we max at 4x4, there's no reason to load more than 16 streams
+				ids = ids.slice(0, 16);
+
+				fetchStreamNames(access_token, ids).then((channel_names) => {
+					createTwitchEmbeds(channel_names);
+				});
+			});
 		}
 
 		if (!logged_in) {
@@ -281,9 +290,7 @@
 		}
 	}
 
-	$(document).ready(function () {
-		onDocumentReady();
-	});
+	$(document).ready(() => onDocumentReady());
 
 </script>
 </body>

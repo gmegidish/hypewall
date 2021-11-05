@@ -1,9 +1,5 @@
-# hypewall
+# Hypewall
+[https://hypewall.tv]
 
-### run locally
-`http-server src -p 9000`
-
-### deploy
-`sh deploy`
-
+(Hypewall)[https://hypewall.tv] is a small frontend for Twitch, that displays live channels you follow in a 2x2, 3x3 or 4x4 grid.
 
